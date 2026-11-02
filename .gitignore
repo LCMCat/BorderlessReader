@@ -1,0 +1,14 @@
+# Build output
+build/
+build-*/
+out/
+.vs/
+CMakeUserPresets.json
+
+# IDE / OS noise
+*.user
+*.suo
+*.VC.db
+*.VC.VC.opendb
+Thumbs.db
+.DS_Store
