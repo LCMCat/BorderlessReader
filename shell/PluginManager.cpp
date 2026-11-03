@@ -60,8 +60,8 @@ void PluginManager::startCaptureAfterHide()
     auto *selector = new RegionSelector;
     m_selector = selector;
 
-    connect(selector, &RegionSelector::regionSelected,
-            this, [this, selector](const QRect &globalRect, const QPixmap &regionPixmap) {
+    connect(selector, &RegionSelector::selectionReady,
+            this, [this, selector](const Selection &selection) {
         if (m_selector != selector)
             return;
 
@@ -75,7 +75,7 @@ void PluginManager::startCaptureAfterHide()
         restoreSourceWidget();
 
         if (IToolPlugin *tool = plugin(pluginIndex))
-            tool->onRegionSelected(globalRect, regionPixmap);
+            tool->onSelection(selection);
     });
 
     connect(selector, &RegionSelector::canceled,

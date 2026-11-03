@@ -13,6 +13,7 @@
 #include <QPainterPath>
 #include <QPushButton>
 #include <QScreen>
+#include <QStringList>
 #include <QVBoxLayout>
 
 #include <algorithm>
@@ -210,6 +211,24 @@ public:
             "  border: 1px solid #E6DFD1;"
             "  border-radius: 14px;"
             "}"
+            "QFrame#ocrCard {"
+            "  background: #FFFDF8;"
+            "  border: 1px solid #E6DFD1;"
+            "  border-radius: 14px;"
+            "}"
+            "QLabel#ocrKey {"
+            "  color: #8A877E;"
+            "  font-size: 10px;"
+            "}"
+            "QLabel#ocrText {"
+            "  color: #1D2736;"
+            "  font-size: 15px;"
+            "  font-weight: 600;"
+            "}"
+            "QLabel#ocrMeta {"
+            "  color: #8A877E;"
+            "  font-size: 10px;"
+            "}"
             "QLabel#infoKey {"
             "  color: #8A877E;"
             "  font-size: 10px;"
@@ -335,6 +354,31 @@ public:
         previewLayout->addWidget(preview);
         outer->addWidget(previewCard);
 
+        // OCR 结果：先占位，识别完成后由 setOcrResult() 填进来。
+        auto *ocrCard = new QFrame(this);
+        ocrCard->setObjectName(QStringLiteral("ocrCard"));
+        auto *ocrLayout = new QVBoxLayout(ocrCard);
+        ocrLayout->setContentsMargins(18, 12, 18, 12);
+        ocrLayout->setSpacing(5);
+
+        auto *ocrKey = new QLabel(tr("选区文字 · core/Ocr"), ocrCard);
+        ocrKey->setObjectName(QStringLiteral("ocrKey"));
+        ocrLayout->addWidget(ocrKey);
+
+        m_ocrText = new QLabel(tr("识别中…"), ocrCard);
+        m_ocrText->setObjectName(QStringLiteral("ocrText"));
+        m_ocrText->setWordWrap(true);
+        m_ocrText->setMinimumHeight(46);   // 预留两行，结果回来时窗口不会突然跳高
+        m_ocrText->setTextInteractionFlags(Qt::TextSelectableByMouse);
+        ocrLayout->addWidget(m_ocrText);
+
+        m_ocrMeta = new QLabel(tr("正在识别选区…"), ocrCard);
+        m_ocrMeta->setObjectName(QStringLiteral("ocrMeta"));
+        m_ocrMeta->setWordWrap(true);
+        ocrLayout->addWidget(m_ocrMeta);
+
+        outer->addWidget(ocrCard);
+
         // 数据结构说明。
         auto *infoCard = new QFrame(this);
         infoCard->setObjectName(QStringLiteral("infoCard"));
@@ -399,6 +443,51 @@ public:
         setFixedWidth(620);
         adjustSize();
     }
+
+    /// 识别结果回来后填进窗口；识别中窗口已经可见，这里只更新文字。
+    void setOcrResult(bool ready,
+                      const QString &backend,
+                      const QString &reason,
+                      const Ocr::Result &result)
+    {
+        if (!result.isOk()) {
+            m_ocrText->setText(tr("识别不可用"));
+            m_ocrMeta->setText(reason.isEmpty() ? result.error : reason);
+        } else if (result.words.isEmpty()) {
+            m_ocrText->setText(tr("没有识别到文字"));
+            m_ocrMeta->setText(ready ? backend : reason);
+        } else {
+            // 只展示前若干个词，避免把窗口撑成一段长文；词框信息证明坐标是真实可用的。
+            constexpr int kMaxShownWords = 12;
+            const int shown = qMin(static_cast<int>(result.words.size()), kMaxShownWords);
+            QStringList words;
+            words.reserve(shown);
+            for (int i = 0; i < shown; ++i)
+                words.append(result.words.at(i).text);
+            if (static_cast<int>(result.words.size()) > shown)
+                words.append(QStringLiteral("…"));
+            m_ocrText->setText(words.join(QLatin1Char(' ')));
+
+            const Ocr::Word &first = result.words.first();
+            m_ocrMeta->setText(tr("%1 · %2 个词 · 首词框 [%3, %4, %5 × %6]")
+                                   .arg(backend)
+                                   .arg(static_cast<int>(result.words.size()))
+                                   .arg(qRound(first.box.x()))
+                                   .arg(qRound(first.box.y()))
+                                   .arg(qRound(first.box.width()))
+                                   .arg(qRound(first.box.height())));
+        }
+
+        // 文字变长会把窗口撑高：重新收一下尺寸，再保证不越出当前屏幕。
+        adjustSize();
+        QScreen *screen = ScreenUtils::screenForRect(frameGeometry());
+        if (screen)
+            move(ScreenUtils::clampWindowToAvailableGeometry(frameGeometry(), screen).topLeft());
+    }
+
+private:
+    QLabel *m_ocrText = nullptr;
+    QLabel *m_ocrMeta = nullptr;
 };
 
 QString DemoPlugin::name() const
@@ -414,8 +503,11 @@ QIcon DemoPlugin::icon() const
     return demoIcon;
 }
 
-void DemoPlugin::onRegionSelected(const QRect &globalRect, const QPixmap &regionPixmap)
+void DemoPlugin::onSelection(const Selection &selection)
 {
+    const QRect &globalRect = selection.globalRect;
+    const QPixmap &regionPixmap = selection.regionPixmap;
+
     // 每次选区都可以生成新的结果窗口；旧窗口会被关闭，避免窗口越开越多。
     if (m_resultDialog)
         m_resultDialog->close();
@@ -434,4 +526,19 @@ void DemoPlugin::onRegionSelected(const QRect &globalRect, const QPixmap &region
     dialog->show();
     dialog->raise();
     dialog->activateWindow();
+
+    // OCR 是框架机制：插件只发起请求，结果回到 GUI 线程后再填进已经打开的窗口。
+    // 上一次识别如果还没回来就取消，避免旧结果盖到新窗口上。
+    m_recognizer.cancel(m_ocrRequest);
+    const QPointer<DemoResultDialog> guard(dialog);
+    m_ocrRequest = m_recognizer.recognize(
+        regionPixmap.toImage(),
+        [this, guard](const Ocr::Result &result) {
+            if (!guard)
+                return;   // 窗口已经关了，这次结果没人要
+            guard->setOcrResult(m_recognizer.state() == Ocr::Recognizer::State::Ready,
+                                m_recognizer.backendDescription(),
+                                m_recognizer.unavailableReason(),
+                                result);
+        });
 }

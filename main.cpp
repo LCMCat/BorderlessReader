@@ -1,4 +1,5 @@
 #include "plugins/DemoPlugin.h"
+#include "plugins/WordLookup/WordLookupPlugin.h"
 #include "shell/FloatBar.h"
 #include "shell/PluginManager.h"
 
@@ -48,6 +49,7 @@ int main(int argc, char *argv[])
     //   2. 在 CMakeLists.txt 添加源文件；
     //   3. 在下面增加一行 addPlugin()，顺序即工具栏中的显示顺序。
     pluginManager.addPlugin(std::make_unique<DemoPlugin>());
+    pluginManager.addPlugin(std::make_unique<WordLookupPlugin>());
 
     FloatBar floatBar(&pluginManager);
     floatBar.show();

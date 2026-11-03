@@ -19,7 +19,7 @@ class RegionSelector;
  *   1. 隐藏来源窗口（悬浮条），给桌面合成器一点时间；
  *   2. 创建全屏 RegionSelector；
  *   3. 选区完成/取消后恢复悬浮条；
- *   4. 把 QRect + QPixmap 直接交给对应插件的 onRegionSelected()。
+ *   4. 把 Selection（选区 + 整屏快照）直接交给对应插件的 onSelection()。
  *
  * 插件对象的生命周期由 PluginManager 自己持有，界面层不负责 delete。
  */

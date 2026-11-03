@@ -158,8 +158,17 @@ void RegionSelector::finishWithSelection()
     releaseInputGrab();
     hide();
 
+    // 整屏快照一并交给插件：QImage 隐式共享，这里只是多一个引用，
+    // 插件要做“整行 OCR”时不必自己重新抓屏。
+    Selection selection;
+    selection.globalRect = region;
+    selection.regionPixmap = regionPixmap;
+    selection.desktopImage = m_capture.image;
+    selection.desktopRect = m_capture.globalRect;
+    selection.desktopScale = m_capture.scale;
+
     // 先隐藏选区器，再同步通知插件，Demo 窗口出现时不会被遮罩挡在后面。
-    emit regionSelected(region, regionPixmap);
+    emit selectionReady(selection);
     deleteLater();
 }
 

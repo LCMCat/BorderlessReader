@@ -1,8 +1,8 @@
 #pragma once
 
+#include "core/Selection.h"
+
 #include <QIcon>
-#include <QPixmap>
-#include <QRect>
 #include <QString>
 
 /**
@@ -11,13 +11,11 @@
  * 工具插件只关心“选区完成后做什么”，不需要知道悬浮条、遮罩或鼠标事件。
  * 需要新增查词、翻译、公式识别等功能时，实现这个接口并注册即可。
  *
- * 坐标约定：
- *  - globalRect 使用 Qt 全局逻辑像素（device-independent pixels，DIP）；
- *  - regionPixmap 是实际屏幕像素裁剪结果，在 HiDPI 屏幕上通常大于
- *    globalRect 的宽高，并带有 devicePixelRatio()。
+ * 坐标与线程约定见 Selection：选区是逻辑坐标（DIP），截图是物理像素；
+ * 需要整行/上下文文字时用 Selection::desktopImage，不要自己重新抓屏。
  *
- * onRegionSelected() 在 GUI 线程中调用。若插件需要异步保存数据，请自行复制
- * globalRect 和 regionPixmap 后再使用。
+ * onSelection() 在 GUI 线程中调用。若插件需要异步保存数据，请自行复制
+ * globalRect / 图片后再使用（QImage、QPixmap 本身不保证跨线程安全）。
  */
 class IToolPlugin
 {
@@ -31,6 +29,5 @@ public:
     virtual QIcon icon() const = 0;
 
     /// 用户在屏幕上完成框选后回调。
-    virtual void onRegionSelected(const QRect &globalRect,
-                                  const QPixmap &regionPixmap) = 0;
+    virtual void onSelection(const Selection &selection) = 0;
 };

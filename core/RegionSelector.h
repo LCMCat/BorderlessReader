@@ -1,5 +1,6 @@
 #pragma once
 
+#include "core/Selection.h"
 #include "core/Utils/CaptureUtils.h"
 
 #include <QPixmap>
@@ -41,7 +42,8 @@ public:
     bool beginSelection();
 
 signals:
-    void regionSelected(const QRect &globalRect, const QPixmap &regionPixmap);
+    /// 选区完成。除了选区截图，还带上整屏快照供需要上下文的插件使用。
+    void selectionReady(const Selection &selection);
     void canceled();
 
 protected:
